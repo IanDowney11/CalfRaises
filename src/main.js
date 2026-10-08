@@ -95,8 +95,32 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   let swSegmentStart = null;
   let swRaf = null;
 
+  // Keep the screen awake while the stopwatch runs. The browser drops the lock
+  // whenever the page is hidden, so re-acquire when it becomes visible again.
+  let wakeLock = null;
+
+  async function acquireWakeLock() {
+    if (!('wakeLock' in navigator) || wakeLock) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch { /* denied or unsupported; the timer still works, the screen may just sleep */ }
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && swRunning) {
+      acquireWakeLock();
+      cancelAnimationFrame(swRaf);
+      swTick();
+    }
+  });
+
   function swElapsedSeconds() {
-    const running = swRunning ? performance.now() - swSegmentStart : 0;
+    const running = swRunning ? Date.now() - swSegmentStart : 0;
     return (swAccumulatedMs + running) / 1000;
   }
 
@@ -110,16 +134,18 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   function startStopwatch() {
     if (swRunning) return;
     swRunning = true;
-    swSegmentStart = performance.now();
+    swSegmentStart = Date.now();
     btnStopwatchToggle.textContent = 'Stop timer';
+    acquireWakeLock();
     swTick();
   }
 
   function pauseStopwatch() {
     if (!swRunning) return;
-    swAccumulatedMs += performance.now() - swSegmentStart;
+    swAccumulatedMs += Date.now() - swSegmentStart;
     swRunning = false;
     cancelAnimationFrame(swRaf);
+    releaseWakeLock();
     btnStopwatchToggle.textContent = 'Start timer';
   }
 
@@ -128,6 +154,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     swAccumulatedMs = 0;
     swSegmentStart = null;
     cancelAnimationFrame(swRaf);
+    releaseWakeLock();
     stopwatchDisplay.textContent = '0.0s';
     btnStopwatchToggle.textContent = 'Start timer';
   }
