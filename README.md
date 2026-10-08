@@ -4,22 +4,31 @@ A simple PWA for logging single-leg calf raise hold times. Tap a leg, hold, tap 
 
 ## Features
 
-- One-tap timer per leg (Left / Right), no manual entry needed
+- 3 sessions a day, 3 holds per leg per session; enter times manually or use the helper stopwatch
+- Automatic encrypted backup to NOSTR
 - Today's hold count and average per leg
 - Full history grouped by day, with delete per entry
 - Progress chart of daily average hold time per leg
 - Installable PWA, works offline (data stored locally in the browser)
 
+## Backup (NOSTR)
+
+Each hold is encrypted (NIP-44, to your own key) and published to NOSTR relays as soon as you save it; deletes are published too. On every launch the app pulls the backup, merges anything missing, and pushes anything the relays don't have yet.
+
+- The key is generated on first launch and kept in localStorage. **Copy it from the Backup tab and store it somewhere safe** - it's the only way to restore.
+- To restore on a new device/browser: Backup tab -> paste the key -> Import & sync.
+
 ## Local dev
 
-No build step — it's static HTML/CSS/JS. Serve the folder with any static server, e.g.:
-
 ```bash
-npx serve .
+npm install
+npm run dev
 ```
 
-Then open the printed local URL in your browser (or on your phone, over the same network, to test as an installed PWA).
+## Build / deploy
+
+`npm run build` outputs to `dist/`. Push to GitHub - Vercel builds and deploys on every push to `main` (see `vercel.json`).
 
 ## Data
 
-All entries are stored in `localStorage` on the device — nothing is sent anywhere. Clearing browser data or using a different device/browser starts a fresh history.
+Holds live in `localStorage` on the device and in your encrypted NOSTR backup.

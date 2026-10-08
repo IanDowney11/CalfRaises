@@ -5,15 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#2a78d6" />
   <meta name="description" content="Track single-leg calf raise hold times and watch your progress" />
-  <link rel="manifest" href="manifest.json" />
-  <link rel="icon" href="icon-192.svg" />
-  <link rel="apple-touch-icon" href="icon-192.svg" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icon-192.svg" />
+  <link rel="apple-touch-icon" href="/icon-192.svg" />
+  <link rel="stylesheet" href="/src/style.css" />
   <title>Calf Raise Hold Tracker</title>
 </head>
 <body>
   <header class="app-header">
     <h1>Calf Raise Holds</h1>
+    <span class="sync-pill"><span id="sync-dot" class="sync-dot"></span><span id="sync-label">Connecting…</span></span>
   </header>
 
   <main>
@@ -37,6 +38,34 @@
 
       <button class="btn-danger" id="btn-clear" type="button">Clear all data</button>
     </section>
+
+    <!-- BACKUP VIEW -->
+    <section id="view-backup" class="view" hidden>
+      <h2 class="section-heading">NOSTR backup</h2>
+      <div class="backup-card">
+        <p class="backup-card__status" id="sync-detail"></p>
+        <p class="hint">Every hold is encrypted with your key and saved to NOSTR relays automatically. Open the app on a new phone with the same key and your history comes back.</p>
+      </div>
+
+      <h2 class="section-heading">Your key</h2>
+      <div class="backup-card">
+        <p class="hint">Keep this secret. Anyone with it can read your backup. Copy it somewhere safe (a password manager).</p>
+        <div class="key-display" id="key-display"></div>
+        <button class="btn-secondary" id="copy-key-btn" type="button">Copy key</button>
+      </div>
+
+      <h2 class="section-heading">Restore on another device</h2>
+      <div class="backup-card">
+        <p class="hint">Paste your key to switch this device to your existing backup.</p>
+        <input class="key-input" id="import-key-input" type="text" placeholder="nsec1…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+        <button class="btn-secondary" id="import-key-btn" type="button">Import &amp; sync</button>
+      </div>
+
+      <div class="backup-actions">
+        <button class="btn-secondary" id="refetch-btn" type="button">Re-fetch from relays</button>
+        <button class="btn-secondary" id="push-all-btn" type="button">Push everything now</button>
+      </div>
+    </section>
   </main>
 
   <nav class="tab-bar">
@@ -45,6 +74,9 @@
     </button>
     <button class="tab-btn" data-view="progress" type="button">
       <span>Progress</span>
+    </button>
+    <button class="tab-btn" data-view="backup" type="button">
+      <span>Backup</span>
     </button>
   </nav>
 
@@ -78,6 +110,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>

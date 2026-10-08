@@ -1,3 +1,5 @@
+import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombstoneHold } from './nostr.js';
+
 (() => {
   const STORAGE_KEY = 'calfHoldEntries';
 
@@ -171,6 +173,7 @@
 
     closeEntry();
     renderAll();
+    backupHold(entry);
   }
 
   btnStopwatchToggle.addEventListener('click', () => (swRunning ? pauseStopwatch() : startStopwatch()));
@@ -190,6 +193,7 @@
     entries = entries.filter(x => x.id !== id);
     saveEntries(entries);
     renderAll();
+    backupDelete(id);
   }
 
   // ---------- session cards ----------
@@ -431,6 +435,7 @@
   const views = {
     log: document.getElementById('view-log'),
     progress: document.getElementById('view-progress'),
+    backup: document.getElementById('view-backup'),
   };
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -444,11 +449,162 @@
 
   // ---------- clear all ----------
   document.getElementById('btn-clear').addEventListener('click', () => {
-    if (confirm('Delete all logged holds? This cannot be undone.')) {
+    if (confirm('Delete all logged holds, including your NOSTR backup? This cannot be undone.')) {
+      const ids = entries.map(e => e.id);
       entries = [];
       saveEntries(entries);
       renderAll();
+      ids.forEach(backupDelete);
     }
+  });
+
+  // ---------- NOSTR backup ----------
+  // Every hold is published as an encrypted event when saved. On load we pull
+  // the backup and merge it in, then push anything the relays don't have yet.
+  const PENDING_DELETES_KEY = 'calfHoldPendingDeletes';
+  const syncDot = document.getElementById('sync-dot');
+  const syncLabel = document.getElementById('sync-label');
+  const syncDetail = document.getElementById('sync-detail');
+  const keyDisplay = document.getElementById('key-display');
+  const importKeyInput = document.getElementById('import-key-input');
+
+  const remote = new Map(); // id -> { createdAt, deleted } newest event seen per hold
+
+  function setSyncStatus(state, text, detail) {
+    syncDot.className = `sync-dot ${state}`;
+    syncLabel.textContent = text;
+    if (detail !== undefined) syncDetail.textContent = detail;
+  }
+
+  function loadPendingDeletes() {
+    try { return JSON.parse(localStorage.getItem(PENDING_DELETES_KEY)) || []; } catch { return []; }
+  }
+
+  function savePendingDeletes(ids) {
+    localStorage.setItem(PENDING_DELETES_KEY, JSON.stringify(ids));
+  }
+
+  function backupHold(entry) {
+    setSyncStatus('', 'Backing up…');
+    publishHold(entry)
+      .then(() => { remote.set(entry.id, { createdAt: Math.floor(Date.now() / 1000), deleted: false }); setSyncStatus('ok', 'Backed up'); })
+      .catch(() => setSyncStatus('error', 'Backup pending', 'Will retry next time the app opens online.'));
+  }
+
+  function backupDelete(id) {
+    savePendingDeletes([...new Set([...loadPendingDeletes(), id])]);
+    tombstoneHold(id)
+      .then(() => savePendingDeletes(loadPendingDeletes().filter(x => x !== id)))
+      .catch(() => {});
+  }
+
+  let renderTimer = null;
+  function scheduleRender() {
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(renderAll, 60);
+  }
+
+  function validHold(h) {
+    return h && (h.leg === 'left' || h.leg === 'right')
+      && Number.isInteger(h.session) && h.session >= 1
+      && isFinite(h.duration) && h.duration > 0
+      && typeof h.ts === 'string' && !isNaN(new Date(h.ts));
+  }
+
+  function onRemoteEvent({ id, createdAt, deleted, hold }) {
+    const prev = remote.get(id);
+    if (prev && prev.createdAt >= createdAt) return;
+    remote.set(id, { createdAt, deleted });
+
+    if (deleted) {
+      if (entries.some(e => e.id === id)) {
+        entries = entries.filter(e => e.id !== id);
+        saveEntries(entries);
+        scheduleRender();
+      }
+      return;
+    }
+    if (entries.some(e => e.id === id) || loadPendingDeletes().includes(id) || !validHold(hold)) return;
+
+    entries.push({ id, leg: hold.leg, session: hold.session, duration: hold.duration, ts: hold.ts });
+    entries.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+    saveEntries(entries);
+    scheduleRender();
+  }
+
+  async function pushMissing() {
+    for (const id of loadPendingDeletes()) {
+      try { await tombstoneHold(id); savePendingDeletes(loadPendingDeletes().filter(x => x !== id)); } catch { /* retry next load */ }
+    }
+    const missing = entries.filter(e => !remote.has(e.id));
+    let failed = 0;
+    for (const e of missing) {
+      try { await publishHold(e); remote.set(e.id, { createdAt: Math.floor(Date.now() / 1000), deleted: false }); } catch { failed++; }
+    }
+    return { pushed: missing.length - failed, failed };
+  }
+
+  async function onEose() {
+    const { pushed, failed } = await pushMissing();
+    const detail = `${entries.length} hold${entries.length === 1 ? '' : 's'} stored locally and on relays.`
+      + (pushed ? ` Pushed ${pushed} new.` : '');
+    setSyncStatus(failed ? 'error' : 'ok', failed ? `${failed} not backed up` : 'Backed up', detail);
+  }
+
+  function startSync() {
+    remote.clear();
+    setSyncStatus('', 'Connecting…', '');
+    try {
+      connect(onRemoteEvent, onEose);
+    } catch (e) {
+      setSyncStatus('error', 'Offline');
+      console.warn('NOSTR connect failed:', e);
+    }
+  }
+
+  function applyImportedKey(nsec) {
+    if (importNsec(nsec)) {
+      setSyncStatus('ok', 'Key imported — reloading…');
+      setTimeout(() => location.reload(), 600);
+    } else {
+      importKeyInput.classList.add('is-invalid');
+    }
+  }
+
+  document.getElementById('copy-key-btn').addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    try {
+      await navigator.clipboard.writeText(getNsec());
+      btn.textContent = 'Copied!';
+    } catch {
+      btn.textContent = 'Copy failed';
+    }
+    setTimeout(() => { btn.textContent = 'Copy key'; }, 2000);
+  });
+
+  document.getElementById('import-key-btn').addEventListener('click', () => {
+    const val = importKeyInput.value.trim();
+    if (val) applyImportedKey(val);
+  });
+  importKeyInput.addEventListener('input', () => importKeyInput.classList.remove('is-invalid'));
+
+  document.getElementById('refetch-btn').addEventListener('click', () => {
+    disconnect();
+    startSync();
+  });
+
+  document.getElementById('push-all-btn').addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = 'Pushing…';
+    remote.clear(); // forget what we think the relays have, so everything is re-sent
+    let ok = 0, fail = 0;
+    for (const entry of entries) {
+      try { await publishHold(entry); remote.set(entry.id, { createdAt: Math.floor(Date.now() / 1000), deleted: false }); ok++; } catch { fail++; }
+    }
+    btn.disabled = false;
+    btn.textContent = fail ? `Done (${ok} pushed, ${fail} failed)` : `Done — ${ok} pushed`;
+    setTimeout(() => { btn.textContent = 'Push everything now'; }, 3000);
   });
 
   // ---------- service worker ----------
@@ -456,5 +612,8 @@
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
+  initKey();
+  keyDisplay.textContent = getNsec();
   renderAll();
+  startSync();
 })();
