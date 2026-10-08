@@ -52,41 +52,91 @@
   const chartCardEl = document.getElementById('chart-card');
   const lastSavedEl = document.getElementById('last-saved');
 
-  const timerOverlay = document.getElementById('timer-overlay');
-  const timerLegLabel = document.getElementById('timer-leg-label');
-  const timerDisplay = document.getElementById('timer-display');
-  const btnStop = document.getElementById('btn-stop');
-  const btnCancel = document.getElementById('btn-cancel');
+  const entryOverlay = document.getElementById('entry-overlay');
+  const entryLegLabel = document.getElementById('entry-leg-label');
+  const entryInput = document.getElementById('entry-input');
+  const stopwatchDisplay = document.getElementById('stopwatch-display');
+  const btnStopwatchToggle = document.getElementById('btn-stopwatch-toggle');
+  const btnStopwatchReset = document.getElementById('btn-stopwatch-reset');
+  const btnSave = document.getElementById('btn-save');
+  const btnEntryCancel = document.getElementById('btn-entry-cancel');
 
-  // ---------- timer ----------
-  let timerLeg = null;
-  let timerStart = null;
-  let timerRaf = null;
+  // ---------- entry form + helper stopwatch ----------
+  // The stopwatch is purely an optional aid: while running it live-fills the
+  // duration field, but the field stays freely editable and nothing is saved
+  // until the user taps Save.
+  let entryLeg = null;
+  let swRunning = false;
+  let swAccumulatedMs = 0;
+  let swSegmentStart = null;
+  let swRaf = null;
 
-  function startTimer(leg) {
-    timerLeg = leg;
-    timerStart = performance.now();
-    timerLegLabel.textContent = `${legLabel(leg)} leg hold`;
-    timerDisplay.textContent = '0.0s';
-    timerOverlay.hidden = false;
-    tickTimer();
+  function swElapsedSeconds() {
+    const running = swRunning ? performance.now() - swSegmentStart : 0;
+    return (swAccumulatedMs + running) / 1000;
   }
 
-  function tickTimer() {
-    const elapsed = (performance.now() - timerStart) / 1000;
-    timerDisplay.textContent = `${elapsed.toFixed(1)}s`;
-    timerRaf = requestAnimationFrame(tickTimer);
+  function swTick() {
+    const secs = swElapsedSeconds();
+    stopwatchDisplay.textContent = `${secs.toFixed(1)}s`;
+    entryInput.value = secs.toFixed(1);
+    swRaf = requestAnimationFrame(swTick);
   }
 
-  function stopTimer() {
-    const elapsed = (performance.now() - timerStart) / 1000;
-    cancelAnimationFrame(timerRaf);
-    timerOverlay.hidden = true;
+  function startStopwatch() {
+    if (swRunning) return;
+    swRunning = true;
+    swSegmentStart = performance.now();
+    btnStopwatchToggle.textContent = 'Stop timer';
+    swTick();
+  }
+
+  function pauseStopwatch() {
+    if (!swRunning) return;
+    swAccumulatedMs += performance.now() - swSegmentStart;
+    swRunning = false;
+    cancelAnimationFrame(swRaf);
+    btnStopwatchToggle.textContent = 'Start timer';
+  }
+
+  function resetStopwatch() {
+    swRunning = false;
+    swAccumulatedMs = 0;
+    swSegmentStart = null;
+    cancelAnimationFrame(swRaf);
+    stopwatchDisplay.textContent = '0.0s';
+    btnStopwatchToggle.textContent = 'Start timer';
+  }
+
+  function openEntry(leg) {
+    entryLeg = leg;
+    entryLegLabel.textContent = `${legLabel(leg)} leg hold`;
+    entryOverlay.classList.remove('entry-overlay--left', 'entry-overlay--right');
+    entryOverlay.classList.add(`entry-overlay--${leg}`);
+    entryInput.value = '';
+    entryInput.classList.remove('is-invalid');
+    resetStopwatch();
+    entryOverlay.hidden = false;
+    entryInput.focus();
+  }
+
+  function closeEntry() {
+    resetStopwatch();
+    entryOverlay.hidden = true;
+  }
+
+  function saveEntry() {
+    const val = parseFloat(entryInput.value);
+    if (!isFinite(val) || val <= 0) {
+      entryInput.classList.add('is-invalid');
+      entryInput.focus();
+      return;
+    }
 
     const entry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      leg: timerLeg,
-      duration: Math.round(elapsed * 10) / 10,
+      leg: entryLeg,
+      duration: Math.round(val * 10) / 10,
       ts: new Date().toISOString(),
     };
     entries.push(entry);
@@ -95,18 +145,20 @@
     lastSavedEl.hidden = false;
     lastSavedEl.textContent = `Saved: ${legLabel(entry.leg)} leg — ${entry.duration.toFixed(1)}s`;
 
+    closeEntry();
     renderAll();
   }
 
-  function cancelTimer() {
-    cancelAnimationFrame(timerRaf);
-    timerOverlay.hidden = true;
-  }
-
-  document.getElementById('btn-left').addEventListener('click', () => startTimer('left'));
-  document.getElementById('btn-right').addEventListener('click', () => startTimer('right'));
-  btnStop.addEventListener('click', stopTimer);
-  btnCancel.addEventListener('click', cancelTimer);
+  document.getElementById('btn-left').addEventListener('click', () => openEntry('left'));
+  document.getElementById('btn-right').addEventListener('click', () => openEntry('right'));
+  btnStopwatchToggle.addEventListener('click', () => (swRunning ? pauseStopwatch() : startStopwatch()));
+  btnStopwatchReset.addEventListener('click', resetStopwatch);
+  btnSave.addEventListener('click', saveEntry);
+  btnEntryCancel.addEventListener('click', closeEntry);
+  entryInput.addEventListener('input', () => {
+    entryInput.classList.remove('is-invalid');
+    if (swRunning) pauseStopwatch();
+  });
 
   // ---------- delete ----------
   function deleteEntry(id) {

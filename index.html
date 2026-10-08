@@ -24,11 +24,11 @@
       <div class="leg-tiles">
         <button class="leg-tile leg-tile--left" id="btn-left" type="button">
           <span class="leg-tile__label">Left Leg</span>
-          <span class="leg-tile__hint">Tap to start hold</span>
+          <span class="leg-tile__hint">Tap to log a hold</span>
         </button>
         <button class="leg-tile leg-tile--right" id="btn-right" type="button">
           <span class="leg-tile__label">Right Leg</span>
-          <span class="leg-tile__hint">Tap to start hold</span>
+          <span class="leg-tile__hint">Tap to log a hold</span>
         </button>
       </div>
 
@@ -59,12 +59,34 @@
     </button>
   </nav>
 
-  <!-- TIMER OVERLAY -->
-  <div class="timer-overlay" id="timer-overlay" hidden>
-    <div class="timer-overlay__leg" id="timer-leg-label"></div>
-    <div class="timer-overlay__time" id="timer-display">0.0s</div>
-    <button class="timer-overlay__stop" id="btn-stop" type="button">Stop</button>
-    <button class="timer-overlay__cancel" id="btn-cancel" type="button">Cancel</button>
+  <!-- MANUAL ENTRY OVERLAY -->
+  <div class="entry-overlay" id="entry-overlay" hidden>
+    <div class="entry-overlay__leg" id="entry-leg-label"></div>
+
+    <div class="entry-overlay__input-row">
+      <input
+        class="entry-overlay__input"
+        id="entry-input"
+        type="number"
+        inputmode="decimal"
+        step="0.1"
+        min="0"
+        placeholder="0.0"
+        autocomplete="off"
+      />
+      <span class="entry-overlay__unit">s</span>
+    </div>
+
+    <div class="stopwatch-row">
+      <span class="stopwatch-row__time" id="stopwatch-display">0.0s</span>
+      <button class="stopwatch-btn" id="btn-stopwatch-toggle" type="button">Start timer</button>
+      <button class="stopwatch-btn stopwatch-btn--ghost" id="btn-stopwatch-reset" type="button">Reset</button>
+    </div>
+
+    <div class="entry-overlay__actions">
+      <button class="entry-overlay__save" id="btn-save" type="button">Save</button>
+      <button class="entry-overlay__cancel" id="btn-entry-cancel" type="button">Cancel</button>
+    </div>
   </div>
 
   <script src="app.js"></script>

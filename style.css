@@ -342,8 +342,8 @@ main {
   color: var(--series-left);
 }
 
-/* Timer overlay */
-.timer-overlay {
+/* Manual entry overlay */
+.entry-overlay {
   position: fixed;
   inset: 0;
   background: var(--page-plane);
@@ -351,45 +351,133 @@ main {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
+  gap: 1.75rem;
+  padding: 1.5rem;
   z-index: 50;
 }
 
-.timer-overlay[hidden] { display: none; }
+.entry-overlay[hidden] { display: none; }
 
-.timer-overlay__leg {
+.entry-overlay--left { --accent: var(--series-left); }
+.entry-overlay--right { --accent: var(--series-right); }
+
+.entry-overlay__leg {
   font-size: 1.2rem;
   font-weight: 800;
   color: var(--text-secondary);
 }
 
-.timer-overlay__time {
+.entry-overlay__input-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.entry-overlay__input {
+  width: 9rem;
+  font-family: inherit;
   font-size: 4rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-}
-
-.timer-overlay__stop {
-  width: 160px;
-  height: 160px;
-  border-radius: 50%;
+  text-align: right;
+  color: var(--text-primary);
+  background: none;
   border: none;
-  background: var(--danger);
-  color: #fff;
-  font-size: 1.3rem;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  border-bottom: 3px solid var(--baseline);
+  padding-bottom: 0.1rem;
 }
 
-.timer-overlay__stop:active { transform: scale(0.96); }
+.entry-overlay__input:focus {
+  outline: none;
+  border-bottom-color: var(--accent, var(--series-left));
+}
 
-.timer-overlay__cancel {
+.entry-overlay__input.is-invalid {
+  border-bottom-color: var(--danger);
+}
+
+/* hide number input spinner arrows */
+.entry-overlay__input::-webkit-outer-spin-button,
+.entry-overlay__input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.entry-overlay__input {
+  -moz-appearance: textfield;
+}
+
+.entry-overlay__unit {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.stopwatch-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+}
+
+.stopwatch-row__time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text-secondary);
+  min-width: 3.4rem;
+}
+
+.stopwatch-btn {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  background: var(--accent, var(--series-left));
+  color: #fff;
+}
+
+.stopwatch-btn--ghost {
+  background: none;
+  color: var(--text-muted);
+  padding: 0.5rem 0.6rem;
+}
+
+.entry-overlay__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 260px;
+}
+
+.entry-overlay__save {
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  background: var(--accent, var(--series-left));
+  color: #fff;
+  font-family: inherit;
+  font-size: 1.1rem;
+  font-weight: 800;
+  padding: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+}
+
+.entry-overlay__save:active { transform: scale(0.98); }
+
+.entry-overlay__cancel {
   background: none;
   border: none;
   color: var(--text-muted);
   font-size: 0.9rem;
   font-weight: 700;
-  padding: 0.5rem 1rem;
+  padding: 0.25rem 1rem;
   cursor: pointer;
 }
