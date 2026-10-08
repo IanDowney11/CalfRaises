@@ -1,4 +1,4 @@
-const CACHE_NAME = 'calraises-v1';
+const CACHE_NAME = 'calfraises-v1';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
