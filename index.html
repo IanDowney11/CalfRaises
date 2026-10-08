@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#2a78d6" />
+  <meta name="description" content="Track single-leg calf raise hold times and watch your progress" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon-192.svg" />
+  <link rel="apple-touch-icon" href="icon-192.svg" />
+  <link rel="stylesheet" href="style.css" />
+  <title>Calf Raise Hold Tracker</title>
+</head>
+<body>
+  <header class="app-header">
+    <h1>Calf Raise Holds</h1>
+  </header>
+
+  <main>
+    <!-- LOG VIEW -->
+    <section id="view-log" class="view">
+      <div class="today-summary" id="today-summary"></div>
+
+      <div class="leg-tiles">
+        <button class="leg-tile leg-tile--left" id="btn-left" type="button">
+          <span class="leg-tile__label">Left Leg</span>
+          <span class="leg-tile__hint">Tap to start hold</span>
+        </button>
+        <button class="leg-tile leg-tile--right" id="btn-right" type="button">
+          <span class="leg-tile__label">Right Leg</span>
+          <span class="leg-tile__hint">Tap to start hold</span>
+        </button>
+      </div>
+
+      <div class="last-saved" id="last-saved" hidden></div>
+
+      <h2 class="section-heading">Today's holds</h2>
+      <ul class="entry-list" id="today-list"></ul>
+    </section>
+
+    <!-- PROGRESS VIEW -->
+    <section id="view-progress" class="view" hidden>
+      <h2 class="section-heading">Progress</h2>
+      <div class="chart-card" id="chart-card"></div>
+
+      <h2 class="section-heading">History</h2>
+      <div id="history-days"></div>
+
+      <button class="btn-danger" id="btn-clear" type="button">Clear all data</button>
+    </section>
+  </main>
+
+  <nav class="tab-bar">
+    <button class="tab-btn is-active" data-view="log" type="button">
+      <span>Log</span>
+    </button>
+    <button class="tab-btn" data-view="progress" type="button">
+      <span>Progress</span>
+    </button>
+  </nav>
+
+  <!-- TIMER OVERLAY -->
+  <div class="timer-overlay" id="timer-overlay" hidden>
+    <div class="timer-overlay__leg" id="timer-leg-label"></div>
+    <div class="timer-overlay__time" id="timer-display">0.0s</div>
+    <button class="timer-overlay__stop" id="btn-stop" type="button">Stop</button>
+    <button class="timer-overlay__cancel" id="btn-cancel" type="button">Cancel</button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
