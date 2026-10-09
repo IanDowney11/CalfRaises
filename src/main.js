@@ -90,10 +90,36 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   // until the user taps Save.
   let entryLeg = null;
   let entrySession = null;
-  let swRunning = false;
+  let swPhase = 'idle'; // 'idle' | 'countdown' | 'running'
   let swAccumulatedMs = 0;
   let swSegmentStart = null;
+  let swCountdownEnd = null;
   let swRaf = null;
+
+  // ---------- timer settings (0-10 s each, remembered on this device) ----------
+  // delay: get-ready countdown before the clock starts.
+  // deduct: seconds removed on stop, to cover the time it takes to reach the button.
+  const TIMER_SETTINGS_KEY = 'calfTimerSettings';
+  const timerSettings = (() => {
+    const defaults = { delay: 5, deduct: 2 };
+    try {
+      const s = JSON.parse(localStorage.getItem(TIMER_SETTINGS_KEY)) || {};
+      const ok = v => Number.isInteger(v) && v >= 0 && v <= 10;
+      return { delay: ok(s.delay) ? s.delay : defaults.delay, deduct: ok(s.deduct) ? s.deduct : defaults.deduct };
+    } catch {
+      return defaults;
+    }
+  })();
+
+  [['setting-delay', 'delay'], ['setting-deduct', 'deduct']].forEach(([id, key]) => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = Array.from({ length: 11 }, (_, n) => `<option value="${n}">${n}s</option>`).join('');
+    sel.value = String(timerSettings[key]);
+    sel.addEventListener('change', () => {
+      timerSettings[key] = Number(sel.value);
+      localStorage.setItem(TIMER_SETTINGS_KEY, JSON.stringify(timerSettings));
+    });
+  });
 
   // Keep the screen awake while the stopwatch runs. The browser drops the lock
   // whenever the page is hidden, so re-acquire when it becomes visible again.
@@ -112,48 +138,82 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && swRunning) {
+    if (document.visibilityState === 'visible' && swPhase !== 'idle') {
       acquireWakeLock();
-      cancelAnimationFrame(swRaf);
+      clearTimeout(swRaf);
       swTick();
     }
   });
 
   function swElapsedSeconds() {
-    const running = swRunning ? Date.now() - swSegmentStart : 0;
+    const running = swPhase === 'running' ? Date.now() - swSegmentStart : 0;
     return (swAccumulatedMs + running) / 1000;
   }
 
+  function beginRunning(startAt) {
+    swPhase = 'running';
+    swSegmentStart = startAt;
+    btnStopwatchToggle.textContent = 'Stop timer';
+  }
+
   function swTick() {
+    if (swPhase === 'countdown') {
+      const remainingMs = swCountdownEnd - Date.now();
+      if (remainingMs <= 0) {
+        beginRunning(swCountdownEnd);
+      } else {
+        stopwatchDisplay.textContent = `Get ready ${Math.ceil(remainingMs / 1000)}`;
+        swRaf = setTimeout(swTick, 100);
+        return;
+      }
+    }
     const secs = swElapsedSeconds();
     stopwatchDisplay.textContent = `${secs.toFixed(1)}s`;
     entryInput.value = secs.toFixed(1);
-    swRaf = requestAnimationFrame(swTick);
+    swRaf = setTimeout(swTick, 100);
   }
 
   function startStopwatch() {
-    if (swRunning) return;
-    swRunning = true;
-    swSegmentStart = Date.now();
-    btnStopwatchToggle.textContent = 'Stop timer';
+    if (swPhase !== 'idle') return;
     acquireWakeLock();
+    if (timerSettings.delay > 0) {
+      swPhase = 'countdown';
+      swCountdownEnd = Date.now() + timerSettings.delay * 1000;
+      btnStopwatchToggle.textContent = 'Cancel';
+    } else {
+      beginRunning(Date.now());
+    }
     swTick();
   }
 
-  function pauseStopwatch() {
-    if (!swRunning) return;
-    swAccumulatedMs += Date.now() - swSegmentStart;
-    swRunning = false;
-    cancelAnimationFrame(swRaf);
+  // Stops the clock (or cancels the countdown). applyDeduction is true only
+  // for the Stop button; typing into the field just pauses without altering it.
+  function stopStopwatch(applyDeduction) {
+    if (swPhase === 'idle') return;
+    if (swPhase === 'running') {
+      let total = swAccumulatedMs + (Date.now() - swSegmentStart);
+      if (applyDeduction) total = Math.max(0, total - timerSettings.deduct * 1000);
+      swAccumulatedMs = total;
+      if (applyDeduction) {
+        const secs = total / 1000;
+        stopwatchDisplay.textContent = `${secs.toFixed(1)}s`;
+        entryInput.value = secs > 0 ? secs.toFixed(1) : '';
+      }
+    } else {
+      stopwatchDisplay.textContent = `${(swAccumulatedMs / 1000).toFixed(1)}s`;
+    }
+    swPhase = 'idle';
+    clearTimeout(swRaf);
     releaseWakeLock();
     btnStopwatchToggle.textContent = 'Start timer';
   }
 
   function resetStopwatch() {
-    swRunning = false;
+    swPhase = 'idle';
     swAccumulatedMs = 0;
     swSegmentStart = null;
-    cancelAnimationFrame(swRaf);
+    swCountdownEnd = null;
+    clearTimeout(swRaf);
     releaseWakeLock();
     stopwatchDisplay.textContent = '0.0s';
     btnStopwatchToggle.textContent = 'Start timer';
@@ -203,13 +263,13 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     backupHold(entry);
   }
 
-  btnStopwatchToggle.addEventListener('click', () => (swRunning ? pauseStopwatch() : startStopwatch()));
+  btnStopwatchToggle.addEventListener('click', () => (swPhase === 'idle' ? startStopwatch() : stopStopwatch(true)));
   btnStopwatchReset.addEventListener('click', resetStopwatch);
   btnSave.addEventListener('click', saveEntry);
   btnEntryCancel.addEventListener('click', closeEntry);
   entryInput.addEventListener('input', () => {
     entryInput.classList.remove('is-invalid');
-    if (swRunning) pauseStopwatch();
+    stopStopwatch(false);
   });
 
   // ---------- delete ----------
