@@ -426,7 +426,7 @@ main {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   color: var(--text-secondary);
-  min-width: 6rem;
+  min-width: 5rem;
 }
 
 .stopwatch-btn {
@@ -678,3 +678,16 @@ main {
   border-radius: 10px;
   padding: 0.4rem 0.5rem;
 }
+
+/* Get-ready countdown: one huge number instead of the duration box */
+.countdown-big {
+  display: none;
+  font-size: min(48vw, 14rem);
+  line-height: 1;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent, var(--series-left));
+}
+
+.entry-overlay--counting .countdown-big { display: block; }
+.entry-overlay--counting .entry-overlay__input-row { display: none; }

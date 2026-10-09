@@ -150,7 +150,14 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     return (swAccumulatedMs + running) / 1000;
   }
 
+  // Big centred number during the get-ready countdown (replaces the duration box).
+  const countdownBigEl = document.getElementById('countdown-big');
+  function setCounting(on) {
+    entryOverlay.classList.toggle('entry-overlay--counting', on);
+  }
+
   function beginRunning(startAt) {
+    setCounting(false);
     swPhase = 'running';
     swSegmentStart = startAt;
     btnStopwatchToggle.textContent = 'Stop timer';
@@ -162,7 +169,9 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
       if (remainingMs <= 0) {
         beginRunning(swCountdownEnd);
       } else {
-        stopwatchDisplay.textContent = `Get ready ${Math.ceil(remainingMs / 1000)}`;
+        const n = Math.ceil(remainingMs / 1000);
+        countdownBigEl.textContent = n;
+        stopwatchDisplay.textContent = 'Get ready';
         swRaf = setTimeout(swTick, 100);
         return;
       }
@@ -178,6 +187,8 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     acquireWakeLock();
     if (timerSettings.delay > 0) {
       swPhase = 'countdown';
+      entryInput.blur();
+      setCounting(true);
       swCountdownEnd = Date.now() + timerSettings.delay * 1000;
       btnStopwatchToggle.textContent = 'Cancel';
     } else {
@@ -203,6 +214,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
       stopwatchDisplay.textContent = `${(swAccumulatedMs / 1000).toFixed(1)}s`;
     }
     swPhase = 'idle';
+    setCounting(false);
     clearTimeout(swRaf);
     releaseWakeLock();
     btnStopwatchToggle.textContent = 'Start timer';
@@ -210,6 +222,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
 
   function resetStopwatch() {
     swPhase = 'idle';
+    setCounting(false);
     swAccumulatedMs = 0;
     swSegmentStart = null;
     swCountdownEnd = null;
