@@ -424,6 +424,22 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     };
   }
 
+  // Per-day signed gap (left avg − right avg) for days with both legs logged.
+  function dailyGaps() {
+    const byDay = new Map();
+    entries.forEach(e => {
+      const k = dateKey(e.ts);
+      if (!byDay.has(k)) byDay.set(k, { left: [], right: [] });
+      byDay.get(k)[e.leg].push(e.duration);
+    });
+    return [...byDay.keys()].sort()
+      .filter(k => byDay.get(k).left.length && byDay.get(k).right.length)
+      .map(k => {
+        const signed = average(byDay.get(k).left) - average(byDay.get(k).right);
+        return { key: k, signed, gap: Math.abs(signed) };
+      });
+  }
+
   function renderProgressStats() {
     const el = document.getElementById('progress-stats');
     const avgOf = leg => average(entries.filter(e => e.leg === leg).map(e => e.duration));
@@ -437,11 +453,14 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     });
     const completed = [...groups.values()].filter(n => n >= HOLDS_PER_LEG * 2).length;
 
+    // Latest day's gap, so it matches the end of the gap chart.
     let diffValue = '–', diffSub = 'needs both legs';
-    if (leftAvg !== null && rightAvg !== null) {
-      const diff = Math.abs(leftAvg - rightAvg);
-      diffValue = `${diff.toFixed(1)}s`;
-      diffSub = diff < 0.05 ? 'legs are even' : `${leftAvg > rightAvg ? 'Left' : 'Right'} is stronger`;
+    const gaps = dailyGaps();
+    if (gaps.length) {
+      const latest = gaps[gaps.length - 1];
+      const stronger = latest.gap < 0.05 ? 'legs are even' : `${latest.signed > 0 ? 'Left' : 'Right'} stronger`;
+      diffValue = `${latest.gap.toFixed(1)}s`;
+      diffSub = gaps.length > 1 ? `${stronger} · was ${gaps[0].gap.toFixed(1)}s` : stronger;
     }
 
     const lt = formatDelta(legTrend('left'));
@@ -454,7 +473,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
       tile('stat--right', 'Right average', rightAvg === null ? '–' : `${rightAvg.toFixed(1)}s`, 'all holds') +
       tile('stat--left', 'Left increase', lt.value, lt.sub) +
       tile('stat--right', 'Right increase', rt.value, rt.sub) +
-      tile('', 'Leg difference', diffValue, diffSub) +
+      tile('', 'Latest leg gap', diffValue, diffSub) +
       tile('', 'Sessions done', completed, `of ${groups.size} started`);
   }
 
@@ -548,15 +567,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   // Daily gap between leg averages (absolute), for days with both legs logged.
   function buildGapChart() {
     const el = document.getElementById('gap-card');
-    const byDay = new Map();
-    entries.forEach(e => {
-      const k = dateKey(e.ts);
-      if (!byDay.has(k)) byDay.set(k, { left: [], right: [] });
-      byDay.get(k)[e.leg].push(e.duration);
-    });
-    const pts = [...byDay.keys()].sort()
-      .filter(k => byDay.get(k).left.length && byDay.get(k).right.length)
-      .map(k => ({ key: k, gap: Math.abs(average(byDay.get(k).left) - average(byDay.get(k).right)) }));
+    const pts = dailyGaps();
 
     if (pts.length < 2) {
       el.innerHTML = `<p class="empty-note">Log both legs on at least two days to see whether the gap is closing.</p>`;
