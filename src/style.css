@@ -125,6 +125,13 @@ main {
   margin-top: 0.1rem;
 }
 
+.gap-summary {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 /* Progress stats grid (reuses the stat tile look) */
 .progress-stats {
   display: grid;

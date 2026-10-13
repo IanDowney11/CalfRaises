@@ -545,6 +545,57 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     attachChartHover(days, leftSeries, rightSeries, { W, H, padL, padR, xAt });
   }
 
+  // Daily gap between leg averages (absolute), for days with both legs logged.
+  function buildGapChart() {
+    const el = document.getElementById('gap-card');
+    const byDay = new Map();
+    entries.forEach(e => {
+      const k = dateKey(e.ts);
+      if (!byDay.has(k)) byDay.set(k, { left: [], right: [] });
+      byDay.get(k)[e.leg].push(e.duration);
+    });
+    const pts = [...byDay.keys()].sort()
+      .filter(k => byDay.get(k).left.length && byDay.get(k).right.length)
+      .map(k => ({ key: k, gap: Math.abs(average(byDay.get(k).left) - average(byDay.get(k).right)) }));
+
+    if (pts.length < 2) {
+      el.innerHTML = `<p class="empty-note">Log both legs on at least two days to see whether the gap is closing.</p>`;
+      return;
+    }
+
+    const first = pts[0].gap, last = pts[pts.length - 1].gap;
+    const change = last - first;
+    const summary = Math.abs(change) < 0.05
+      ? `Gap is steady at ${last.toFixed(1)}s`
+      : `Gap has ${change < 0 ? 'narrowed' : 'widened'} from ${first.toFixed(1)}s to ${last.toFixed(1)}s`;
+
+    const W = 300, H = 160, padL = 28, padR = 10, padT = 14, padB = 26;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const maxVal = Math.max(...pts.map(p => p.gap)) * 1.15 || 1;
+    const xAt = i => padL + (i * plotW) / (pts.length - 1);
+    const yAt = v => padT + plotH - (v / maxVal) * plotH;
+
+    const path = pts.map((p, i) => `${i ? 'L' : 'M'} ${xAt(i).toFixed(1)} ${yAt(p.gap).toFixed(1)}`).join(' ');
+    const dots = pts.map((p, i) => `<circle cx="${xAt(i).toFixed(1)}" cy="${yAt(p.gap).toFixed(1)}" r="4" fill="var(--text-secondary)"><title>${formatDayLabel(p.key)}: ${p.gap.toFixed(1)}s</title></circle>`).join('');
+    const grid = [0.5, 1].map(f => {
+      const y = padT + plotH * (1 - f);
+      return `<line x1="${padL}" x2="${W - padR}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--gridline)" stroke-width="1"></line>`;
+    }).join('');
+    const step = Math.max(1, Math.ceil(pts.length / 6));
+    const labels = pts.map((p, i) => (i % step === 0 || i === pts.length - 1)
+      ? `<text x="${xAt(i).toFixed(1)}" y="${H - 8}" font-size="9" fill="var(--text-muted)" text-anchor="middle">${formatDayLabel(p.key).replace('Today', 'Tdy')}</text>` : '').join('');
+    const yTop = `<text x="${padL - 4}" y="${padT + 3}" font-size="9" fill="var(--text-muted)" text-anchor="end">${maxVal.toFixed(0)}s</text>`;
+
+    el.innerHTML = `
+      <p class="gap-summary">${summary}</p>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">
+        ${grid}
+        <line x1="${padL}" x2="${W - padR}" y1="${padT + plotH}" y2="${padT + plotH}" stroke="var(--baseline)" stroke-width="1"></line>
+        <path d="${path}" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round"></path>
+        ${dots}${yTop}${labels}
+      </svg>`;
+  }
+
   function attachChartHover(days, leftSeries, rightSeries, geom) {
     const svg = document.getElementById('chart-svg');
     const tooltip = document.getElementById('chart-tooltip');
@@ -590,6 +641,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     renderHistoryDays();
     renderProgressStats();
     buildChart();
+    buildGapChart();
   }
 
   // ---------- tabs ----------
