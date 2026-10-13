@@ -125,6 +125,45 @@ main {
   margin-top: 0.1rem;
 }
 
+/* Progress stats grid (reuses the stat tile look) */
+.progress-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.progress-stats .stat {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.75rem 1rem;
+}
+
+.progress-stats .stat__label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.progress-stats .stat__value {
+  font-size: 1.4rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  margin-top: 0.15rem;
+}
+
+.progress-stats .stat--left .stat__value { color: var(--series-left); }
+.progress-stats .stat--right .stat__value { color: var(--series-right); }
+
+.progress-stats .stat__sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+
 /* Leg tiles */
 .leg-tiles {
   display: grid;

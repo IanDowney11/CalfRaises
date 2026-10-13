@@ -398,6 +398,66 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     attachSessionHandlers(historyDaysEl);
   }
 
+  // ---------- progress stats ----------
+  // "Increase" compares the first logged day's average with the latest day's,
+  // so it needs at least two days with holds for that leg.
+  function legTrend(leg) {
+    const byDay = new Map();
+    entries.filter(e => e.leg === leg).forEach(e => {
+      const k = dateKey(e.ts);
+      if (!byDay.has(k)) byDay.set(k, []);
+      byDay.get(k).push(e.duration);
+    });
+    const keys = [...byDay.keys()].sort();
+    if (keys.length < 2) return null;
+    const first = average(byDay.get(keys[0]));
+    const last = average(byDay.get(keys[keys.length - 1]));
+    return { delta: last - first, pct: (last - first) / first * 100 };
+  }
+
+  function formatDelta(t) {
+    if (!t) return { value: '–', sub: 'needs 2+ days' };
+    const sign = t.delta > 0 ? '+' : t.delta < 0 ? '−' : '';
+    return {
+      value: `${sign}${Math.abs(t.delta).toFixed(1)}s`,
+      sub: `${sign}${Math.abs(t.pct).toFixed(0)}% since first day`,
+    };
+  }
+
+  function renderProgressStats() {
+    const el = document.getElementById('progress-stats');
+    const avgOf = leg => average(entries.filter(e => e.leg === leg).map(e => e.duration));
+    const leftAvg = avgOf('left');
+    const rightAvg = avgOf('right');
+
+    const groups = new Map();
+    entries.forEach(e => {
+      const k = `${dateKey(e.ts)}|${e.session}`;
+      groups.set(k, (groups.get(k) || 0) + 1);
+    });
+    const completed = [...groups.values()].filter(n => n >= HOLDS_PER_LEG * 2).length;
+
+    let diffValue = '–', diffSub = 'needs both legs';
+    if (leftAvg !== null && rightAvg !== null) {
+      const diff = Math.abs(leftAvg - rightAvg);
+      diffValue = `${diff.toFixed(1)}s`;
+      diffSub = diff < 0.05 ? 'legs are even' : `${leftAvg > rightAvg ? 'Left' : 'Right'} is stronger`;
+    }
+
+    const lt = formatDelta(legTrend('left'));
+    const rt = formatDelta(legTrend('right'));
+    const tile = (cls, label, value, sub) =>
+      `<div class="stat ${cls}"><div class="stat__label">${label}</div><div class="stat__value">${value}</div><div class="stat__sub">${sub}</div></div>`;
+
+    el.innerHTML =
+      tile('stat--left', 'Left average', leftAvg === null ? '–' : `${leftAvg.toFixed(1)}s`, 'all holds') +
+      tile('stat--right', 'Right average', rightAvg === null ? '–' : `${rightAvg.toFixed(1)}s`, 'all holds') +
+      tile('stat--left', 'Left increase', lt.value, lt.sub) +
+      tile('stat--right', 'Right increase', rt.value, rt.sub) +
+      tile('', 'Leg difference', diffValue, diffSub) +
+      tile('', 'Sessions done', completed, `of ${groups.size} started`);
+  }
+
   // ---------- chart ----------
   const SERIES_COLOR = { left: 'var(--series-left)', right: 'var(--series-right)' };
 
@@ -528,6 +588,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   function renderAll() {
     renderTodaySummary();
     renderHistoryDays();
+    renderProgressStats();
     buildChart();
   }
 
