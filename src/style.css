@@ -796,3 +796,24 @@ main {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
+
+/* Strength progress */
+.progress-stats--inner { margin-bottom: 0.9rem; }
+
+.day-strip {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.day-dot {
+  flex: 1;
+  aspect-ratio: 1;
+  max-width: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--baseline);
+}
+
+.day-dot--done { background: var(--success); border-color: var(--success); }
+.day-dot--today:not(.day-dot--done) { border-color: var(--text-primary); }
+.day-strip__caption { margin-top: 0.5rem; }

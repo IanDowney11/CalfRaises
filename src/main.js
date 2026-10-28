@@ -844,8 +844,44 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     svg.addEventListener('pointerleave', hide);
   }
 
+  // ---------- strength progress ----------
+  // Tiles for totals and consistency, plus a strip of the last 14 days (filled = done).
+  function renderStrengthProgress() {
+    const el = document.getElementById('strength-card');
+    const doneDays = new Set(entries.filter(isStrength).map(e => dateKey(e.ts)));
+    const todayKey = dateKey(new Date().toISOString());
+
+    const strip = [];
+    let recent = 0;
+    for (let i = 13; i >= 0; i--) {
+      const key = addDays(todayKey, -i);
+      const done = doneDays.has(key);
+      if (done) recent++;
+      strip.push(`<span class="day-dot${done ? ' day-dot--done' : ''}${i === 0 ? ' day-dot--today' : ''}" title="${formatDayLabel(key)}"></span>`);
+    }
+
+    const sorted = [...doneDays].sort();
+    const last = sorted[sorted.length - 1];
+    const possible = Math.ceil(14 / STRENGTH_INTERVAL_DAYS);
+    const status = strengthStatus(todayKey);
+    const next = last ? addDays(last, STRENGTH_INTERVAL_DAYS) : todayKey;
+    const tile = (label, value, sub) =>
+      `<div class="stat"><div class="stat__label">${label}</div><div class="stat__value">${value}</div><div class="stat__sub">${sub}</div></div>`;
+
+    el.innerHTML = `
+      <div class="progress-stats progress-stats--inner">
+        ${tile('Days done', doneDays.size, 'in total')}
+        ${tile('Last 14 days', `${recent}/${possible}`, 'goal: every other day')}
+        ${tile('Last done', last ? formatDayLabel(last) : '–', last ? '' : 'none yet')}
+        ${tile('Next due', status.due ? 'Today' : formatDayLabel(next), status.due ? 'not done yet' : 'rest day until then')}
+      </div>
+      <div class="day-strip" aria-label="Strength days, last 14">${strip.join('')}</div>
+      <p class="hint day-strip__caption">Last 14 days · filled = strength done</p>`;
+  }
+
   // ---------- render all ----------
   function renderAll() {
+    renderStrengthProgress();
     renderTodaySummary();
     renderHistoryDays();
     renderProgressStats();
