@@ -16,8 +16,9 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
   }
 
-  // Two timed sessions a day; each is one to-failure set for both legs together, then left, then right.
+  // Two timed sessions a day: session 1 is both legs together, session 2 is each leg on its own.
   const LEGS = ['both', 'left', 'right'];
+  const sessionLegs = n => (n === 1 ? ['both'] : ['left', 'right']);
   const SESSIONS_PER_DAY = 2;
   const HOLDS_PER_LEG = 1;
   // Old data was 3 holds per leg per session; only used to place pre-session entries.
@@ -309,6 +310,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
       setCounting(true);
       swCountdownEnd = Date.now() + timerSettings.delay * 1000;
       btnStopwatchToggle.textContent = 'Cancel';
+      metronome.start(); // beat starts with the countdown so you can settle into the pace
     } else {
       beginRunning(Date.now());
     }
@@ -428,7 +430,9 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
 
     return sessionNums.map(n => {
       const inSession = dayEntries.filter(e => e.session === n);
-      const legRows = LEGS.map(leg => {
+      // Today shows the session's own legs; older data may have others, so show any leg with holds too.
+      const shownLegs = LEGS.filter(leg => inSession.some(e => e.leg === leg) || (editable && sessionLegs(n).includes(leg)));
+      const legRows = shownLegs.map(leg => {
         const holds = inSession.filter(e => e.leg === leg);
         const slotCount = Math.max(HOLDS_PER_LEG, holds.length);
         const slots = [];
@@ -445,7 +449,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
       }).join('');
 
       const done = inSession.length;
-      const total = HOLDS_PER_LEG * LEGS.length;
+      const total = HOLDS_PER_LEG * shownLegs.length;
       return `
         <div class="session-card${editable && done >= total ? ' session-card--done' : ''}">
           <div class="session-card__head">
@@ -536,7 +540,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     const bothAvg = average(both.map(e => e.duration));
     const leftAvg = average(left.map(e => e.duration));
     const rightAvg = average(right.map(e => e.duration));
-    const target = SESSIONS_PER_DAY * HOLDS_PER_LEG;
+    const target = HOLDS_PER_LEG; // each leg setup is done once a day
 
     todaySummaryEl.innerHTML = `
       <div class="stat stat--both">
@@ -640,7 +644,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
       const k = `${dateKey(e.ts)}|${e.session}`;
       groups.set(k, (groups.get(k) || 0) + 1);
     });
-    const completed = [...groups.values()].filter(n => n >= HOLDS_PER_LEG * LEGS.length).length;
+    const completed = [...groups].filter(([k, n]) => n >= sessionLegs(Number(k.split('|')[1])).length).length;
 
     // Latest day's gap, so it matches the end of the gap chart.
     let diffValue = '–', diffSub = 'needs both legs';
