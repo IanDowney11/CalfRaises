@@ -410,7 +410,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   function deleteEntry(id) {
     const e = entries.find(x => x.id === id);
     if (!e) return;
-    const what = isStrength(e) ? `strength set ${e.set}` : `${legLabel(e.leg)} leg hold of ${e.duration.toFixed(1)}s`;
+    const what = isStrength(e) ? "strength day" : `${legLabel(e.leg)} leg hold of ${e.duration.toFixed(1)}s`;
     if (!confirm(`Delete ${what}?`)) return;
     entries = entries.filter(x => x.id !== id);
     saveEntries(entries);
@@ -476,31 +476,27 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     return { due: false, text: `Rest day · next strength ${formatDayLabel(next)}` };
   }
 
-  // Sets are untimed: tap the next empty set to tick it off, tap a done set to undo.
+  // One tick per strength day. The card only appears on a due day (or once done
+  // today, so it can be undone); tap to tick, tap the tick to undo.
   function strengthHtml(dayEntries, editable, todayKey) {
-    const sets = dayEntries.filter(isStrength).sort((a, b) => a.set - b.set);
-    if (!editable && !sets.length) return '';
-    const status = editable ? strengthStatus(todayKey) : null;
-    const slotCount = Math.max(STRENGTH_SETS, sets.length);
-    const slots = [];
-    for (let i = 0; i < slotCount; i++) {
-      const s = sets[i];
-      if (s) {
-        slots.push(`<button type="button" class="slot slot--filled slot--strength" data-delete="${s.id}" aria-label="Undo set ${i + 1}">✓</button>`);
-      } else if (editable) {
-        const isNext = i === sets.length;
-        slots.push(`<button type="button" class="slot slot--empty slot--strength${isNext ? ' slot--next' : ''}" ${isNext ? `data-log-strength="${i + 1}"` : 'disabled'} aria-label="Mark set ${i + 1} done">${isNext ? '+' : ''}</button>`);
-      }
+    const done = dayEntries.filter(isStrength);
+    if (!editable) {
+      return done.length ? `
+      <div class="session-card session-card--done">
+        <div class="session-card__head"><span class="session-card__title">Strength</span><span class="session-card__count">done</span></div>
+      </div>` : '';
     }
-    const done = sets.length;
+    if (!done.length && !strengthStatus(todayKey).due) return '';
+    const button = done.length
+      ? `<button type="button" class="slot slot--filled slot--strength" data-delete="${done[0].id}" aria-label="Undo strength">✓ Done</button>`
+      : `<button type="button" class="slot slot--empty slot--strength slot--next" data-log-strength="1" aria-label="Mark strength done">Mark done</button>`;
     return `
-      <div class="session-card${editable && done >= STRENGTH_SETS ? ' session-card--done' : ''}${status && !status.due && !done ? ' session-card--rest' : ''}">
+      <div class="session-card${done.length ? ' session-card--done' : ''}">
         <div class="session-card__head">
-          <span class="session-card__title">Strength</span>
-          <span class="session-card__count">${done}/${STRENGTH_SETS}</span>
+          <span class="session-card__title">Strength day</span>
         </div>
-        <p class="strength-note">${STRENGTH_SETS} sets of ${STRENGTH_REPS} single-leg raises${status ? ` · ${status.text}` : ''}</p>
-        <div class="slots slots--sets">${slots.join('')}</div>
+        <p class="strength-note">${STRENGTH_SETS} sets of ${STRENGTH_REPS} single-leg raises</p>
+        <div class="slots">${button}</div>
       </div>`;
   }
 

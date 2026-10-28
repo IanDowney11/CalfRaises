@@ -1,4 +1,4 @@
-const CACHE_NAME = 'calfraises-v5';
+const CACHE_NAME = 'calfraises-v6';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',

@@ -5,7 +5,7 @@ A simple PWA for logging single-leg calf raise hold times. Tap a leg, hold, tap 
 ## Features
 
 - 2 timed sessions a day: one to-failure set each for both legs, left and right, paced by a built-in metronome (default 120 bpm both legs, 100 bpm single leg; adjustable, audio + visual beat); enter times manually or use the helper stopwatch
-- Strength day every other day: 3 sets of 15 single-leg raises, untimed - just tick each set off
+- Strength every other day: 3 sets of 15 single-leg raises, untimed - one tick when done; the card is hidden on the days in between
 - Automatic encrypted backup to NOSTR
 - Today's hold count and average per leg
 - Full history grouped by day, with delete per entry
