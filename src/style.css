@@ -10,6 +10,7 @@
   --border: rgba(11, 11, 11, 0.10);
   --series-left: #2a78d6;   /* categorical slot 1 - blue */
   --series-right: #eb6834;  /* categorical slot 2 - orange */
+  --series-both: #7d5bd6;   /* both legs - purple */
   --danger: #d03b3b;
   --success: #006300;
 }
@@ -27,6 +28,7 @@
     --border: rgba(255, 255, 255, 0.10);
     --series-left: #3987e5;
     --series-right: #d95926;
+    --series-both: #9a7df0;
     --danger: #e66767;
     --success: #0ca30c;
   }
@@ -44,6 +46,7 @@
   --border: rgba(255, 255, 255, 0.10);
   --series-left: #3987e5;
   --series-right: #d95926;
+  --series-both: #9a7df0;
   --danger: #e66767;
   --success: #0ca30c;
 }
@@ -89,12 +92,13 @@ main {
 /* Today summary */
 .today-summary {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.5rem;
   margin-top: 0.75rem;
 }
 
 .today-summary .stat {
   flex: 1;
+  min-width: 0;
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -118,6 +122,7 @@ main {
 
 .today-summary .stat--left .stat__value { color: var(--series-left); }
 .today-summary .stat--right .stat__value { color: var(--series-right); }
+.today-summary .stat--both .stat__value { color: var(--series-both); }
 
 .today-summary .stat__sub {
   font-size: 0.8rem;
@@ -164,6 +169,7 @@ main {
 
 .progress-stats .stat--left .stat__value { color: var(--series-left); }
 .progress-stats .stat--right .stat__value { color: var(--series-right); }
+.progress-stats .stat--both .stat__value { color: var(--series-both); }
 
 .progress-stats .stat__sub {
   font-size: 0.8rem;
@@ -406,6 +412,7 @@ main {
 
 .entry-overlay--left { --accent: var(--series-left); }
 .entry-overlay--right { --accent: var(--series-right); }
+.entry-overlay--both { --accent: var(--series-both); }
 
 .entry-overlay__leg {
   font-size: 1.2rem;
@@ -571,6 +578,7 @@ main {
 
 .session-leg__name--left { color: var(--series-left); }
 .session-leg__name--right { color: var(--series-right); }
+.session-leg__name--both { color: var(--series-both); }
 
 .slots {
   flex: 1;
@@ -595,11 +603,13 @@ main {
 .slot--filled { border: none; color: #fff; }
 .slot--filled.slot--left { background: var(--series-left); }
 .slot--filled.slot--right { background: var(--series-right); }
+.slot--filled.slot--both { background: var(--series-both); }
 
 .slot--empty:disabled { cursor: default; opacity: 0.5; }
 .slot--next { font-size: 1.4rem; }
 .slot--next.slot--left { border-color: var(--series-left); color: var(--series-left); }
 .slot--next.slot--right { border-color: var(--series-right); color: var(--series-right); }
+.slot--next.slot--both { border-color: var(--series-both); color: var(--series-both); }
 .slot:active:not(:disabled) { transform: scale(0.96); }
 
 /* Sync status */

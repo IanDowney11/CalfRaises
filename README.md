@@ -1,10 +1,10 @@
-# Calf Raise Hold Tracker
+# Calf Raises
 
 A simple PWA for logging single-leg calf raise hold times. Tap a leg, hold, tap stop — the duration is saved automatically. After a few days of logging, the Progress tab charts your average hold time per leg so you can see whether you're holding longer over time.
 
 ## Features
 
-- 2 timed sessions a day: one to-failure set per leg, paced by a built-in metronome (adjustable bpm, audio + visual beat); enter times manually or use the helper stopwatch
+- 2 timed sessions a day: one to-failure set each for both legs, left and right, paced by a built-in metronome (default 120 bpm both legs, 100 bpm single leg; adjustable, audio + visual beat); enter times manually or use the helper stopwatch
 - Strength day every other day: 3 sets of 15 single-leg raises, untimed - just tick each set off
 - Automatic encrypted backup to NOSTR
 - Today's hold count and average per leg

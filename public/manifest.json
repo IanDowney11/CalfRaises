@@ -1,6 +1,6 @@
 {
-  "name": "Calf Raise Hold Tracker",
-  "short_name": "CalfHolds",
+  "name": "Calf Raises",
+  "short_name": "CalfRaises",
   "description": "Track single-leg calf raise hold times and watch your progress",
   "start_url": "/",
   "display": "standalone",

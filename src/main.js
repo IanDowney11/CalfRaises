@@ -16,7 +16,8 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
   }
 
-  // Two timed sessions a day, one to-failure hold per leg in each.
+  // Two timed sessions a day; each is one to-failure set for both legs together, then left, then right.
+  const LEGS = ['both', 'left', 'right'];
   const SESSIONS_PER_DAY = 2;
   const HOLDS_PER_LEG = 1;
   // Old data was 3 holds per leg per session; only used to place pre-session entries.
@@ -51,7 +52,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   }
 
   function legLabel(leg) {
-    return leg === 'left' ? 'Left' : 'Right';
+    return { both: 'Both', left: 'Left', right: 'Right' }[leg];
   }
 
   function average(nums) {
@@ -100,13 +101,17 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   // ---------- metronome ----------
   // Clicks via Web Audio, scheduled slightly ahead so the beat stays steady even
   // if the main thread stutters. Runs while the timer is running.
+  let entryLeg = null; // which set is open; picks the metronome pace
   const METRONOME_KEY = 'calfMetronome';
   const metronomeSettings = (() => {
-    const defaults = { bpm: 60, on: true };
+    // Both-leg sets are paced faster than single-leg sets.
+    const defaults = { both: 120, single: 100, on: true };
+    const okBpm = v => Number.isInteger(v) && v >= 20 && v <= 200;
     try {
       const s = JSON.parse(localStorage.getItem(METRONOME_KEY)) || {};
       return {
-        bpm: Number.isInteger(s.bpm) && s.bpm >= 20 && s.bpm <= 200 ? s.bpm : defaults.bpm,
+        both: okBpm(s.both) ? s.both : defaults.both,
+        single: okBpm(s.single) ? s.single : defaults.single,
         on: typeof s.on === 'boolean' ? s.on : defaults.on,
       };
     } catch {
@@ -122,24 +127,27 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     localStorage.setItem(METRONOME_KEY, JSON.stringify(metronomeSettings));
   }
 
+  // The pace follows whichever set is open: both-leg or single-leg.
+  const bpmKey = () => (entryLeg === 'both' ? 'both' : 'single');
+  const currentBpm = () => metronomeSettings[bpmKey()];
+
   function renderMetronomeSettings() {
-    bpmValueEl.textContent = metronomeSettings.bpm;
+    bpmValueEl.textContent = currentBpm();
     metronomeOnEl.checked = metronomeSettings.on;
   }
 
   function setBpm(bpm) {
-    metronomeSettings.bpm = Math.min(200, Math.max(20, bpm));
+    metronomeSettings[bpmKey()] = Math.min(200, Math.max(20, bpm));
     saveMetronome();
     renderMetronomeSettings();
   }
 
-  document.getElementById('bpm-down').addEventListener('click', () => setBpm(metronomeSettings.bpm - 2));
-  document.getElementById('bpm-up').addEventListener('click', () => setBpm(metronomeSettings.bpm + 2));
+  document.getElementById('bpm-down').addEventListener('click', () => setBpm(currentBpm() - 2));
+  document.getElementById('bpm-up').addEventListener('click', () => setBpm(currentBpm() + 2));
   metronomeOnEl.addEventListener('change', () => {
     metronomeSettings.on = metronomeOnEl.checked;
     saveMetronome();
   });
-  renderMetronomeSettings();
 
   const metronome = (() => {
     const LOOKAHEAD_S = 0.12;
@@ -167,7 +175,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     function schedule() {
       while (nextBeat < ctx.currentTime + LOOKAHEAD_S) {
         click(nextBeat);
-        nextBeat += 60 / metronomeSettings.bpm;
+        nextBeat += 60 / currentBpm();
       }
     }
 
@@ -197,7 +205,6 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   // The stopwatch is purely an optional aid: while running it live-fills the
   // duration field, but the field stays freely editable and nothing is saved
   // until the user taps Save.
-  let entryLeg = null;
   let entrySession = null;
   let swPhase = 'idle'; // 'idle' | 'countdown' | 'running'
   let swAccumulatedMs = 0;
@@ -347,9 +354,10 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
 
   function openEntry(leg, session) {
     entryLeg = leg;
+    renderMetronomeSettings();
     entrySession = session;
-    entryLegLabel.textContent = `Session ${session} · ${legLabel(leg)} leg`;
-    entryOverlay.classList.remove('entry-overlay--left', 'entry-overlay--right');
+    entryLegLabel.textContent = `Session ${session} · ${leg === "both" ? "Both legs" : legLabel(leg) + " leg"}`;
+    entryOverlay.classList.remove('entry-overlay--both', 'entry-overlay--left', 'entry-overlay--right');
     entryOverlay.classList.add(`entry-overlay--${leg}`);
     entryInput.value = '';
     entryInput.classList.remove('is-invalid');
@@ -382,7 +390,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     saveEntries(entries);
 
     lastSavedEl.hidden = false;
-    lastSavedEl.textContent = `Saved: Session ${entry.session} · ${legLabel(entry.leg)} leg — ${entry.duration.toFixed(1)}s`;
+    lastSavedEl.textContent = `Saved: Session ${entry.session} · ${entry.leg === "both" ? "Both legs" : legLabel(entry.leg) + " leg"} — ${entry.duration.toFixed(1)}s`;
 
     closeEntry();
     renderAll();
@@ -420,7 +428,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
 
     return sessionNums.map(n => {
       const inSession = dayEntries.filter(e => e.session === n);
-      const legRows = ['left', 'right'].map(leg => {
+      const legRows = LEGS.map(leg => {
         const holds = inSession.filter(e => e.leg === leg);
         const slotCount = Math.max(HOLDS_PER_LEG, holds.length);
         const slots = [];
@@ -437,7 +445,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
       }).join('');
 
       const done = inSession.length;
-      const total = HOLDS_PER_LEG * 2;
+      const total = HOLDS_PER_LEG * LEGS.length;
       return `
         <div class="session-card${editable && done >= total ? ' session-card--done' : ''}">
           <div class="session-card__head">
@@ -526,13 +534,20 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   function renderTodaySummary() {
     const todayKey = dateKey(new Date().toISOString());
     const todays = entries.filter(e => dateKey(e.ts) === todayKey);
+    const both = todays.filter(e => e.leg === 'both');
     const left = todays.filter(e => e.leg === 'left');
     const right = todays.filter(e => e.leg === 'right');
+    const bothAvg = average(both.map(e => e.duration));
     const leftAvg = average(left.map(e => e.duration));
     const rightAvg = average(right.map(e => e.duration));
     const target = SESSIONS_PER_DAY * HOLDS_PER_LEG;
 
     todaySummaryEl.innerHTML = `
+      <div class="stat stat--both">
+        <div class="stat__label">Both</div>
+        <div class="stat__value">${both.length}/${target}</div>
+        <div class="stat__sub">${bothAvg ? `avg ${bothAvg.toFixed(1)}s` : 'no holds yet'}</div>
+      </div>
       <div class="stat stat--left">
         <div class="stat__label">Left</div>
         <div class="stat__value">${left.length}/${target}</div>
@@ -606,7 +621,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     const byDay = new Map();
     holds().forEach(e => {
       const k = dateKey(e.ts);
-      if (!byDay.has(k)) byDay.set(k, { left: [], right: [] });
+      if (!byDay.has(k)) byDay.set(k, { both: [], left: [], right: [] });
       byDay.get(k)[e.leg].push(e.duration);
     });
     return [...byDay.keys()].sort()
@@ -620,6 +635,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   function renderProgressStats() {
     const el = document.getElementById('progress-stats');
     const avgOf = leg => average(holds().filter(e => e.leg === leg).map(e => e.duration));
+    const bothAvg = avgOf('both');
     const leftAvg = avgOf('left');
     const rightAvg = avgOf('right');
 
@@ -628,7 +644,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
       const k = `${dateKey(e.ts)}|${e.session}`;
       groups.set(k, (groups.get(k) || 0) + 1);
     });
-    const completed = [...groups.values()].filter(n => n >= HOLDS_PER_LEG * 2).length;
+    const completed = [...groups.values()].filter(n => n >= HOLDS_PER_LEG * LEGS.length).length;
 
     // Latest day's gap, so it matches the end of the gap chart.
     let diffValue = '–', diffSub = 'needs both legs';
@@ -640,12 +656,15 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
       diffSub = gaps.length > 1 ? `${stronger} · was ${gaps[0].gap.toFixed(1)}s` : stronger;
     }
 
+    const bt = formatDelta(legTrend('both'));
     const lt = formatDelta(legTrend('left'));
     const rt = formatDelta(legTrend('right'));
     const tile = (cls, label, value, sub) =>
       `<div class="stat ${cls}"><div class="stat__label">${label}</div><div class="stat__value">${value}</div><div class="stat__sub">${sub}</div></div>`;
 
     el.innerHTML =
+      tile('stat--both', 'Both average', bothAvg === null ? '–' : `${bothAvg.toFixed(1)}s`, 'all holds') +
+      tile('stat--both', 'Both increase', bt.value, bt.sub) +
       tile('stat--left', 'Left average', leftAvg === null ? '–' : `${leftAvg.toFixed(1)}s`, 'all holds') +
       tile('stat--right', 'Right average', rightAvg === null ? '–' : `${rightAvg.toFixed(1)}s`, 'all holds') +
       tile('stat--left', 'Left increase', lt.value, lt.sub) +
@@ -655,7 +674,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   }
 
   // ---------- chart ----------
-  const SERIES_COLOR = { left: 'var(--series-left)', right: 'var(--series-right)' };
+  const SERIES_COLOR = { both: 'var(--series-both)', left: 'var(--series-left)', right: 'var(--series-right)' };
 
   function buildChart() {
     if (holds().length === 0) {
@@ -666,15 +685,16 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     const byDay = new Map();
     holds().forEach(e => {
       const key = dateKey(e.ts);
-      if (!byDay.has(key)) byDay.set(key, { left: [], right: [] });
+      if (!byDay.has(key)) byDay.set(key, { both: [], left: [], right: [] });
       byDay.get(key)[e.leg].push(e.duration);
     });
 
     const days = [...byDay.keys()].sort();
+    const bothSeries = days.map(k => average(byDay.get(k).both));
     const leftSeries = days.map(k => average(byDay.get(k).left));
     const rightSeries = days.map(k => average(byDay.get(k).right));
 
-    const allVals = [...leftSeries, ...rightSeries].filter(v => v !== null);
+    const allVals = [...bothSeries, ...leftSeries, ...rightSeries].filter(v => v !== null);
     const maxVal = Math.max(...allVals) * 1.15 || 10;
 
     const W = 300, H = 200;
@@ -725,8 +745,10 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
         <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block" id="chart-svg">
           ${gridLines}
           <line x1="${padL}" x2="${W - padR}" y1="${padT + plotH}" y2="${padT + plotH}" stroke="var(--baseline)" stroke-width="1"></line>
+          <path d="${seriesPath(bothSeries)}" fill="none" stroke="var(--series-both)" stroke-width="2" stroke-linecap="round"></path>
           <path d="${seriesPath(leftSeries)}" fill="none" stroke="var(--series-left)" stroke-width="2" stroke-linecap="round"></path>
           <path d="${seriesPath(rightSeries)}" fill="none" stroke="var(--series-right)" stroke-width="2" stroke-linecap="round"></path>
+          ${markers(bothSeries, 'both')}
           ${markers(leftSeries, 'left')}
           ${markers(rightSeries, 'right')}
           ${xLabels}
@@ -734,11 +756,12 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
         <div class="chart-tooltip" id="chart-tooltip"></div>
       </div>
       <div class="chart-legend">
+        <span class="chart-legend__item"><span class="chart-legend__swatch" style="background:var(--series-both)"></span>Both legs</span>
         <span class="chart-legend__item"><span class="chart-legend__swatch" style="background:var(--series-left)"></span>Left leg</span>
         <span class="chart-legend__item"><span class="chart-legend__swatch" style="background:var(--series-right)"></span>Right leg</span>
       </div>`;
 
-    attachChartHover(days, leftSeries, rightSeries, { W, H, padL, padR, xAt });
+    attachChartHover(days, bothSeries, leftSeries, rightSeries, { W, H, padL, padR, xAt });
   }
 
   // Daily gap between leg averages (absolute), for days with both legs logged.
@@ -784,7 +807,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
       </svg>`;
   }
 
-  function attachChartHover(days, leftSeries, rightSeries, geom) {
+  function attachChartHover(days, bothSeries, leftSeries, rightSeries, geom) {
     const svg = document.getElementById('chart-svg');
     const tooltip = document.getElementById('chart-tooltip');
     if (!svg || !tooltip) return;
@@ -802,8 +825,9 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
 
     function show(clientX, clientY) {
       const i = nearestIndex(clientX);
-      const l = leftSeries[i], r = rightSeries[i];
+      const b = bothSeries[i], l = leftSeries[i], r = rightSeries[i];
       const parts = [formatDayLabel(days[i])];
+      if (b !== null) parts.push(`Both ${b.toFixed(1)}s`);
       if (l !== null) parts.push(`Left ${l.toFixed(1)}s`);
       if (r !== null) parts.push(`Right ${r.toFixed(1)}s`);
       tooltip.textContent = parts.join(' · ');
@@ -909,7 +933,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     if (h && h.kind === 'strength') {
       return Number.isInteger(h.set) && h.set >= 1 && typeof h.ts === 'string' && !isNaN(new Date(h.ts));
     }
-    return h && (h.leg === 'left' || h.leg === 'right')
+    return h && (h.leg === 'both' || h.leg === 'left' || h.leg === 'right')
       && Number.isInteger(h.session) && h.session >= 1
       && isFinite(h.duration) && h.duration > 0
       && typeof h.ts === 'string' && !isNaN(new Date(h.ts));
