@@ -575,7 +575,7 @@ main {
 .slots {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
   gap: 0.5rem;
 }
 
@@ -737,3 +737,52 @@ main {
 
 .entry-overlay--counting .countdown-big { display: block; }
 .entry-overlay--counting .entry-overlay__input-row { display: none; }
+
+/* Strength card */
+.strength-note {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.6rem;
+}
+
+.slot--filled.slot--strength { background: var(--success); font-size: 1.3rem; }
+.slot--next.slot--strength { border-color: var(--text-secondary); color: var(--text-secondary); }
+.session-card--rest { opacity: 0.6; }
+
+/* Metronome controls */
+.metronome-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.beat-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--baseline);
+}
+
+.beat-dot.is-beat { background: var(--accent, var(--series-left)); }
+
+.bpm-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 1.3rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.bpm-value {
+  min-width: 5rem;
+  text-align: center;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}

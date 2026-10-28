@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#2a78d6" />
-  <meta name="description" content="Track single-leg calf raise hold times and watch your progress" />
+  <meta name="description" content="Time single-leg calf raises to a metronome and log strength sets" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icon-192.svg" />
   <link rel="apple-touch-icon" href="/icon-192.svg" />
@@ -113,6 +113,14 @@
     <div class="timer-settings">
       <label class="timer-settings__item">Get ready <select id="setting-delay"></select></label>
       <label class="timer-settings__item">Deduct on stop <select id="setting-deduct"></select></label>
+    </div>
+
+    <div class="metronome-row">
+      <span class="beat-dot" id="beat-dot" aria-hidden="true"></span>
+      <label class="timer-settings__item"><input type="checkbox" id="metronome-on" /> Metronome</label>
+      <button class="bpm-btn" id="bpm-down" type="button" aria-label="Slower">−</button>
+      <span class="bpm-value"><span id="bpm-value">60</span> bpm</span>
+      <button class="bpm-btn" id="bpm-up" type="button" aria-label="Faster">+</button>
     </div>
 
     <div class="entry-overlay__actions">

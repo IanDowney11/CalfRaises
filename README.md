@@ -4,7 +4,8 @@ A simple PWA for logging single-leg calf raise hold times. Tap a leg, hold, tap 
 
 ## Features
 
-- 3 sessions a day, 3 holds per leg per session; enter times manually or use the helper stopwatch
+- 2 timed sessions a day: one to-failure set per leg, paced by a built-in metronome (adjustable bpm, audio + visual beat); enter times manually or use the helper stopwatch
+- Strength day every other day: 3 sets of 15 single-leg raises, untimed - just tick each set off
 - Automatic encrypted backup to NOSTR
 - Today's hold count and average per leg
 - Full history grouped by day, with delete per entry
@@ -13,7 +14,7 @@ A simple PWA for logging single-leg calf raise hold times. Tap a leg, hold, tap 
 
 ## Backup (NOSTR)
 
-Each hold is encrypted (NIP-44, to your own key) and published to NOSTR relays as soon as you save it; deletes are published too. On every launch the app pulls the backup, merges anything missing, and pushes anything the relays don't have yet.
+Each hold and strength set is encrypted (NIP-44, to your own key) and published to NOSTR relays as soon as you save it; deletes are published too. On every launch the app pulls the backup, merges anything missing, and pushes anything the relays don't have yet.
 
 - The key is generated on first launch and kept in localStorage. **Copy it from the Backup tab and store it somewhere safe** - it's the only way to restore.
 - To restore on a new device/browser: Backup tab -> paste the key -> Import & sync.

@@ -109,8 +109,8 @@ async function publish(tags, content) {
 }
 
 export function publishHold(entry) {
-  const { id, leg, session, duration, ts } = entry
-  const payload = JSON.stringify({ leg, session, duration, ts })
+  const { id, kind, set, leg, session, duration, ts } = entry
+  const payload = JSON.stringify(kind === 'strength' ? { kind, set, ts } : { leg, session, duration, ts })
   return publish([['d', id], ['t', APP_TAG]], nip44.encrypt(payload, conversationKey))
 }
 

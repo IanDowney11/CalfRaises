@@ -16,8 +16,17 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
   }
 
-  const SESSIONS_PER_DAY = 3;
-  const HOLDS_PER_LEG = 3;
+  // Two timed sessions a day, one to-failure hold per leg in each.
+  const SESSIONS_PER_DAY = 2;
+  const HOLDS_PER_LEG = 1;
+  // Old data was 3 holds per leg per session; only used to place pre-session entries.
+  const LEGACY_HOLDS_PER_LEG = 3;
+
+  // Untimed strength work, every other day: 3 sets of 15 single-leg raises.
+  // Stored in the same list (and NOSTR backup) as holds, flagged kind: 'strength'.
+  const STRENGTH_SETS = 3;
+  const STRENGTH_REPS = 15;
+  const STRENGTH_INTERVAL_DAYS = 2;
 
   let entries;
 
@@ -55,11 +64,11 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     let changed = false;
     const counters = new Map();
     list.forEach(e => {
-      if (e.session) return;
+      if (e.session || e.kind === 'strength') return;
       const k = `${dateKey(e.ts)}|${e.leg}`;
       const n = counters.get(k) || 0;
       counters.set(k, n + 1);
-      e.session = Math.min(SESSIONS_PER_DAY, Math.floor(n / HOLDS_PER_LEG) + 1);
+      e.session = Math.min(SESSIONS_PER_DAY, Math.floor(n / LEGACY_HOLDS_PER_LEG) + 1);
       changed = true;
     });
     if (changed) saveEntries(list);
@@ -67,6 +76,10 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   }
 
   entries = migrateEntries(loadEntries());
+
+  const isStrength = e => e.kind === 'strength';
+  // Timed holds only; every stat, chart and session card works off this.
+  const holds = () => entries.filter(e => !isStrength(e));
 
   // ---------- DOM refs ----------
   const todaySummaryEl = document.getElementById('today-summary');
@@ -83,6 +96,102 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   const btnStopwatchReset = document.getElementById('btn-stopwatch-reset');
   const btnSave = document.getElementById('btn-save');
   const btnEntryCancel = document.getElementById('btn-entry-cancel');
+
+  // ---------- metronome ----------
+  // Clicks via Web Audio, scheduled slightly ahead so the beat stays steady even
+  // if the main thread stutters. Runs while the timer is running.
+  const METRONOME_KEY = 'calfMetronome';
+  const metronomeSettings = (() => {
+    const defaults = { bpm: 60, on: true };
+    try {
+      const s = JSON.parse(localStorage.getItem(METRONOME_KEY)) || {};
+      return {
+        bpm: Number.isInteger(s.bpm) && s.bpm >= 20 && s.bpm <= 200 ? s.bpm : defaults.bpm,
+        on: typeof s.on === 'boolean' ? s.on : defaults.on,
+      };
+    } catch {
+      return defaults;
+    }
+  })();
+
+  const bpmValueEl = document.getElementById('bpm-value');
+  const metronomeOnEl = document.getElementById('metronome-on');
+  const beatDotEl = document.getElementById('beat-dot');
+
+  function saveMetronome() {
+    localStorage.setItem(METRONOME_KEY, JSON.stringify(metronomeSettings));
+  }
+
+  function renderMetronomeSettings() {
+    bpmValueEl.textContent = metronomeSettings.bpm;
+    metronomeOnEl.checked = metronomeSettings.on;
+  }
+
+  function setBpm(bpm) {
+    metronomeSettings.bpm = Math.min(200, Math.max(20, bpm));
+    saveMetronome();
+    renderMetronomeSettings();
+  }
+
+  document.getElementById('bpm-down').addEventListener('click', () => setBpm(metronomeSettings.bpm - 2));
+  document.getElementById('bpm-up').addEventListener('click', () => setBpm(metronomeSettings.bpm + 2));
+  metronomeOnEl.addEventListener('change', () => {
+    metronomeSettings.on = metronomeOnEl.checked;
+    saveMetronome();
+  });
+  renderMetronomeSettings();
+
+  const metronome = (() => {
+    const LOOKAHEAD_S = 0.12;
+    let ctx = null;
+    let timer = null;
+    let nextBeat = 0;
+
+    function click(when) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = 1000;
+      gain.gain.setValueAtTime(0.0001, when);
+      gain.gain.exponentialRampToValueAtTime(0.6, when + 0.003);
+      gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.05);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(when);
+      osc.stop(when + 0.06);
+      // Flash the dot in time with the click.
+      setTimeout(() => {
+        beatDotEl.classList.add('is-beat');
+        setTimeout(() => beatDotEl.classList.remove('is-beat'), 90);
+      }, Math.max(0, (when - ctx.currentTime) * 1000));
+    }
+
+    function schedule() {
+      while (nextBeat < ctx.currentTime + LOOKAHEAD_S) {
+        click(nextBeat);
+        nextBeat += 60 / metronomeSettings.bpm;
+      }
+    }
+
+    return {
+      // Create/resume the audio context inside a user gesture (Start tap) so mobile allows sound.
+      prime() {
+        if (!metronomeSettings.on) return;
+        try {
+          ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+          if (ctx.state === 'suspended') ctx.resume();
+        } catch { ctx = null; }
+      },
+      start() {
+        if (!metronomeSettings.on || !ctx || timer) return;
+        nextBeat = ctx.currentTime + 0.05;
+        schedule();
+        timer = setInterval(schedule, 25);
+      },
+      stop() {
+        clearInterval(timer);
+        timer = null;
+      },
+    };
+  })();
 
   // ---------- entry form + helper stopwatch ----------
   // The stopwatch is purely an optional aid: while running it live-fills the
@@ -161,6 +270,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     swPhase = 'running';
     swSegmentStart = startAt;
     btnStopwatchToggle.textContent = 'Stop timer';
+    metronome.start();
   }
 
   function swTick() {
@@ -185,6 +295,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   function startStopwatch() {
     if (swPhase !== 'idle') return;
     acquireWakeLock();
+    metronome.prime();
     if (timerSettings.delay > 0) {
       swPhase = 'countdown';
       entryInput.blur();
@@ -216,6 +327,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     swPhase = 'idle';
     setCounting(false);
     clearTimeout(swRaf);
+    metronome.stop();
     releaseWakeLock();
     btnStopwatchToggle.textContent = 'Start timer';
   }
@@ -227,15 +339,16 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     swSegmentStart = null;
     swCountdownEnd = null;
     clearTimeout(swRaf);
+    metronome.stop();
     releaseWakeLock();
     stopwatchDisplay.textContent = '0.0s';
     btnStopwatchToggle.textContent = 'Start timer';
   }
 
-  function openEntry(leg, session, holdNo) {
+  function openEntry(leg, session) {
     entryLeg = leg;
     entrySession = session;
-    entryLegLabel.textContent = `Session ${session} · ${legLabel(leg)} leg · Hold ${holdNo}`;
+    entryLegLabel.textContent = `Session ${session} · ${legLabel(leg)} leg`;
     entryOverlay.classList.remove('entry-overlay--left', 'entry-overlay--right');
     entryOverlay.classList.add(`entry-overlay--${leg}`);
     entryInput.value = '';
@@ -289,7 +402,8 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   function deleteEntry(id) {
     const e = entries.find(x => x.id === id);
     if (!e) return;
-    if (!confirm(`Delete ${legLabel(e.leg)} leg hold of ${e.duration.toFixed(1)}s?`)) return;
+    const what = isStrength(e) ? `strength set ${e.set}` : `${legLabel(e.leg)} leg hold of ${e.duration.toFixed(1)}s`;
+    if (!confirm(`Delete ${what}?`)) return;
     entries = entries.filter(x => x.id !== id);
     saveEntries(entries);
     renderAll();
@@ -297,7 +411,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   }
 
   // ---------- session cards ----------
-  // One card per session; each leg gets a row of hold slots (3 by default).
+  // One card per session; each leg gets a row of hold slots (1 by default).
   // Filled slots tap-to-delete; the first empty slot (when editable) logs a hold.
   function sessionsHtml(dayEntries, editable) {
     const sessionNums = editable
@@ -313,10 +427,10 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
         for (let i = 0; i < slotCount; i++) {
           const h = holds[i];
           if (h) {
-            slots.push(`<button type="button" class="slot slot--filled slot--${leg}" data-delete="${h.id}" aria-label="Delete ${legLabel(leg)} hold ${i + 1}">${h.duration.toFixed(1)}s</button>`);
+            slots.push(`<button type="button" class="slot slot--filled slot--${leg}" data-delete="${h.id}" aria-label="Delete ${legLabel(leg)} hold">${h.duration.toFixed(1)}s</button>`);
           } else if (editable) {
             const isNext = i === holds.length;
-            slots.push(`<button type="button" class="slot slot--empty slot--${leg}${isNext ? ' slot--next' : ''}" ${isNext ? `data-log-leg="${leg}" data-log-session="${n}" data-log-hold="${i + 1}"` : 'disabled'} aria-label="Log ${legLabel(leg)} hold ${i + 1}">${isNext ? '+' : ''}</button>`);
+            slots.push(`<button type="button" class="slot slot--empty slot--${leg}${isNext ? ' slot--next' : ''}" ${isNext ? `data-log-leg="${leg}" data-log-session="${n}"` : 'disabled'} aria-label="Log ${legLabel(leg)} hold">${isNext ? '+' : ''}</button>`);
           }
         }
         return `<div class="session-leg"><span class="session-leg__name session-leg__name--${leg}">${legLabel(leg)}</span><div class="slots">${slots.join('')}</div></div>`;
@@ -335,13 +449,76 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     }).join('');
   }
 
+  // ---------- strength card ----------
+  function addDays(key, n) {
+    const [y, m, d] = key.split('-').map(Number);
+    const dt = new Date(y, m - 1, d + n);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  }
+
+  // Strength is due again STRENGTH_INTERVAL_DAYS after the last day it was logged
+  // (and stays "due" for the rest of a day it was started on).
+  function strengthStatus(todayKey) {
+    const days = [...new Set(entries.filter(isStrength).map(e => dateKey(e.ts)))].sort();
+    if (!days.length) return { due: true, text: 'Strength day' };
+    const last = days[days.length - 1];
+    if (last === todayKey) return { due: true, text: 'Strength day' };
+    const next = addDays(last, STRENGTH_INTERVAL_DAYS);
+    if (next <= todayKey) return { due: true, text: 'Strength day' };
+    return { due: false, text: `Rest day · next strength ${formatDayLabel(next)}` };
+  }
+
+  // Sets are untimed: tap the next empty set to tick it off, tap a done set to undo.
+  function strengthHtml(dayEntries, editable, todayKey) {
+    const sets = dayEntries.filter(isStrength).sort((a, b) => a.set - b.set);
+    if (!editable && !sets.length) return '';
+    const status = editable ? strengthStatus(todayKey) : null;
+    const slotCount = Math.max(STRENGTH_SETS, sets.length);
+    const slots = [];
+    for (let i = 0; i < slotCount; i++) {
+      const s = sets[i];
+      if (s) {
+        slots.push(`<button type="button" class="slot slot--filled slot--strength" data-delete="${s.id}" aria-label="Undo set ${i + 1}">✓</button>`);
+      } else if (editable) {
+        const isNext = i === sets.length;
+        slots.push(`<button type="button" class="slot slot--empty slot--strength${isNext ? ' slot--next' : ''}" ${isNext ? `data-log-strength="${i + 1}"` : 'disabled'} aria-label="Mark set ${i + 1} done">${isNext ? '+' : ''}</button>`);
+      }
+    }
+    const done = sets.length;
+    return `
+      <div class="session-card${editable && done >= STRENGTH_SETS ? ' session-card--done' : ''}${status && !status.due && !done ? ' session-card--rest' : ''}">
+        <div class="session-card__head">
+          <span class="session-card__title">Strength</span>
+          <span class="session-card__count">${done}/${STRENGTH_SETS}</span>
+        </div>
+        <p class="strength-note">${STRENGTH_SETS} sets of ${STRENGTH_REPS} single-leg raises${status ? ` · ${status.text}` : ''}</p>
+        <div class="slots slots--sets">${slots.join('')}</div>
+      </div>`;
+  }
+
+  function logStrengthSet(setNo) {
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      kind: 'strength',
+      set: setNo,
+      ts: new Date().toISOString(),
+    };
+    entries.push(entry);
+    saveEntries(entries);
+    renderAll();
+    backupHold(entry);
+  }
+
   function attachSessionHandlers(root) {
+    root.querySelectorAll('[data-log-strength]').forEach(btn => {
+      btn.addEventListener('click', () => logStrengthSet(Number(btn.dataset.logStrength)));
+    });
     root.querySelectorAll('[data-delete]').forEach(btn => {
       btn.addEventListener('click', () => deleteEntry(btn.getAttribute('data-delete')));
     });
     root.querySelectorAll('[data-log-leg]').forEach(btn => {
       btn.addEventListener('click', () =>
-        openEntry(btn.dataset.logLeg, Number(btn.dataset.logSession), Number(btn.dataset.logHold)));
+        openEntry(btn.dataset.logLeg, Number(btn.dataset.logSession)));
     });
   }
 
@@ -367,14 +544,14 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
         <div class="stat__sub">${rightAvg ? `avg ${rightAvg.toFixed(1)}s` : 'no holds yet'}</div>
       </div>`;
 
-    todaySessionsEl.innerHTML = sessionsHtml(todays, true);
+    todaySessionsEl.innerHTML = sessionsHtml(todays, true) + strengthHtml(todays, true, todayKey);
     attachSessionHandlers(todaySessionsEl);
   }
 
   // ---------- history list ----------
   function renderHistoryDays() {
     if (entries.length === 0) {
-      historyDaysEl.innerHTML = `<p class="empty-note">No holds logged yet. Start logging on the Log tab.</p>`;
+      historyDaysEl.innerHTML = `<p class="empty-note">Nothing logged yet. Start on the Log tab.</p>`;
       return;
     }
 
@@ -391,7 +568,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
       .map(key => `
         <div class="history-day">
           <div class="history-day__heading">${formatDayLabel(key)}</div>
-          ${sessionsHtml(byDay.get(key), false)}
+          ${sessionsHtml(byDay.get(key), false)}${strengthHtml(byDay.get(key), false)}
         </div>`)
       .join('');
 
@@ -403,7 +580,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   // so it needs at least two days with holds for that leg.
   function legTrend(leg) {
     const byDay = new Map();
-    entries.filter(e => e.leg === leg).forEach(e => {
+    holds().filter(e => e.leg === leg).forEach(e => {
       const k = dateKey(e.ts);
       if (!byDay.has(k)) byDay.set(k, []);
       byDay.get(k).push(e.duration);
@@ -427,7 +604,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   // Per-day signed gap (left avg − right avg) for days with both legs logged.
   function dailyGaps() {
     const byDay = new Map();
-    entries.forEach(e => {
+    holds().forEach(e => {
       const k = dateKey(e.ts);
       if (!byDay.has(k)) byDay.set(k, { left: [], right: [] });
       byDay.get(k)[e.leg].push(e.duration);
@@ -442,12 +619,12 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
 
   function renderProgressStats() {
     const el = document.getElementById('progress-stats');
-    const avgOf = leg => average(entries.filter(e => e.leg === leg).map(e => e.duration));
+    const avgOf = leg => average(holds().filter(e => e.leg === leg).map(e => e.duration));
     const leftAvg = avgOf('left');
     const rightAvg = avgOf('right');
 
     const groups = new Map();
-    entries.forEach(e => {
+    holds().forEach(e => {
       const k = `${dateKey(e.ts)}|${e.session}`;
       groups.set(k, (groups.get(k) || 0) + 1);
     });
@@ -481,13 +658,13 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   const SERIES_COLOR = { left: 'var(--series-left)', right: 'var(--series-right)' };
 
   function buildChart() {
-    if (entries.length === 0) {
-      chartCardEl.innerHTML = `<p class="empty-note">Log a few holds to see your progress chart here.</p>`;
+    if (holds().length === 0) {
+      chartCardEl.innerHTML = `<p class="empty-note">Log a few timed sessions to see your progress chart here.</p>`;
       return;
     }
 
     const byDay = new Map();
-    entries.forEach(e => {
+    holds().forEach(e => {
       const key = dateKey(e.ts);
       if (!byDay.has(key)) byDay.set(key, { left: [], right: [] });
       byDay.get(key)[e.leg].push(e.duration);
@@ -673,7 +850,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
 
   // ---------- clear all ----------
   document.getElementById('btn-clear').addEventListener('click', () => {
-    if (confirm('Delete all logged holds, including your NOSTR backup? This cannot be undone.')) {
+    if (confirm('Delete everything you have logged, including your NOSTR backup? This cannot be undone.')) {
       const ids = entries.map(e => e.id);
       entries = [];
       saveEntries(entries);
@@ -729,6 +906,9 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
   }
 
   function validHold(h) {
+    if (h && h.kind === 'strength') {
+      return Number.isInteger(h.set) && h.set >= 1 && typeof h.ts === 'string' && !isNaN(new Date(h.ts));
+    }
     return h && (h.leg === 'left' || h.leg === 'right')
       && Number.isInteger(h.session) && h.session >= 1
       && isFinite(h.duration) && h.duration > 0
@@ -750,7 +930,9 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
     }
     if (entries.some(e => e.id === id) || loadPendingDeletes().includes(id) || !validHold(hold)) return;
 
-    entries.push({ id, leg: hold.leg, session: hold.session, duration: hold.duration, ts: hold.ts });
+    entries.push(hold.kind === 'strength'
+      ? { id, kind: 'strength', set: hold.set, ts: hold.ts }
+      : { id, leg: hold.leg, session: hold.session, duration: hold.duration, ts: hold.ts });
     entries.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
     saveEntries(entries);
     scheduleRender();
@@ -770,7 +952,7 @@ import { initKey, importNsec, getNsec, connect, disconnect, publishHold, tombsto
 
   async function onEose() {
     const { pushed, failed } = await pushMissing();
-    const detail = `${entries.length} hold${entries.length === 1 ? '' : 's'} stored locally and on relays.`
+    const detail = `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} stored locally and on relays.`
       + (pushed ? ` Pushed ${pushed} new.` : '');
     setSyncStatus(failed ? 'error' : 'ok', failed ? `${failed} not backed up` : 'Backed up', detail);
   }
